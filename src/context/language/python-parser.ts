@@ -2,6 +2,15 @@ import { AbstractParser, EnclosingContext, TreeSitterNode } from "../../constant
 import Parser from "tree-sitter";
 import Python from "tree-sitter-python";
 
+/**
+ * Utility function to process an AST node and check if it fully encloses a given line range.
+ * @param node - The current AST node being processed
+ * @param lineStart - The starting line number of the range to check (1-based)
+ * @param lineEnd - The ending line number of the range to check (1-based)
+ * @param largestSize - The size of the largest enclosing context found so far
+ * @param largestEnclosingContext - The largest enclosing context node found so far
+ * @returns An object containing the largest size and the largest enclosing context node
+ */
 const processNode = (
   node: Parser.SyntaxNode,
   lineStart: number,
@@ -21,6 +30,11 @@ const processNode = (
   return { largestSize, largestEnclosingContext };
 };
 
+/**
+ * Convert a Tree-sitter syntax node to a TreeSitterNode.
+ * @param syntaxNode - The Tree-sitter syntax node to convert
+ * @returns A TreeSitterNode representation of the syntax node
+ */
 const convertSyntaxNodeToTreeSitterNode = (syntaxNode: Parser.SyntaxNode): TreeSitterNode => {
   return {
     type: syntaxNode.type,
@@ -37,6 +51,10 @@ const convertSyntaxNodeToTreeSitterNode = (syntaxNode: Parser.SyntaxNode): TreeS
   };
 };
 
+/**
+ * Python parser: A parser for Python code that identifies syntactic contexts
+ * and validates code as part of the AI agent's code review system.
+ */
 export class PythonParser implements AbstractParser {
   private parser: Parser;
 
@@ -45,13 +63,25 @@ export class PythonParser implements AbstractParser {
     this.parser.setLanguage(Python);
   }
 
+  /**
+   * Find the enclosing context for a given line range in the Python code.
+   * @param file - Content of the Python file
+   * @param lineStart - Starting line number (1-based)
+   * @param lineEnd - Ending line number (1-based)
+   * @returns An EnclosingContext object with the type of the enclosing node
+   */
   findEnclosingContext(file: string, lineStart: number, lineEnd: number): EnclosingContext {
     const tree = this.parser.parse(file);
 
     let largestEnclosingContext: Parser.SyntaxNode | null = null;
     let largestSize = 0;
 
+    /**
+     * Recursive function to traverse AST nodes
+     * @param node - The current AST node being traversed
+     */
     const traverseNodes = (node: Parser.SyntaxNode) => {
+      // Process the current node to check if it encloses the specified line range
       ({ largestSize, largestEnclosingContext } = processNode(
         node,
         lineStart,
@@ -59,20 +89,27 @@ export class PythonParser implements AbstractParser {
         largestSize,
         largestEnclosingContext
       ));
+      // Recursively inspect child nodes
       for (let i = 0; i < node.childCount; i++) {
-        traverseNodes(node.child(i));
+        traverseNodes(node.child(i)); // Traverse each child node
       }
     };
 
+    // Start of the traversal from the root node
     traverseNodes(tree.rootNode);
 
     return {
       enclosingContext: largestEnclosingContext
-        ? convertSyntaxNodeToTreeSitterNode(largestEnclosingContext)
-        : null,
+        ? convertSyntaxNodeToTreeSitterNode(largestEnclosingContext) // Convert to TreeSitterNode if found
+        : null, // Return null if no enclosing context found
     };
   }
 
+  /**
+   * Validate the Python code by attempting to parse it.
+   * @param file - Content of the Python file
+   * @returns An object indicating whether the code is valid and any error message
+   */
   dryRun(file: string): { valid: boolean; error: string } {
     try {
       const tree = this.parser.parse(file);
